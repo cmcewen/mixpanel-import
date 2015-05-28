@@ -7,5 +7,8 @@ require "redis"
 @data = @client.request('export', from_date: (Date.today-1).to_s, to_date: (Date.today-1).to_s)
 
 @data.each do |line| 
-	@redis.lpush "logstash", Hash["mixpanel_fields", line, "type", "mixpanel", "@timestamp", Time.at(line["properties"]["time"]).utc.iso8601].to_json
+	@redis.lpush "logstash", Hash["mixpanel_fields", 
+		line, "type", "mixpanel", 
+		#eastern time so we have to add 4 hours
+		"@timestamp", Time.at(line["properties"]["time"] + 4*60*60).iso8601].to_json
 end

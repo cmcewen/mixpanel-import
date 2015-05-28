@@ -5,7 +5,8 @@ RUN mkdir -p /opt/mixpanel
 WORKDIR /opt/mixpanel
 
 ADD Gemfile /opt/mixpanel/Gemfile
-ADD mixpanel_import.rb /opt/mixpanel/mixpanel_import.rb
 RUN bundle install
+
+ADD mixpanel_import.rb /opt/mixpanel/mixpanel_import.rb
 
 CMD ruby /opt/mixpanel/mixpanel_import.rb
