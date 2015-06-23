@@ -1,3 +1,5 @@
 source 'https://rubygems.org'
 gem 'redis'
 gem 'mixpanel_client'
+gem 'elasticsearch'
+gem 'rest-client'
