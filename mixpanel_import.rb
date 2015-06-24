@@ -3,7 +3,6 @@ require 'redis'
 require 'elasticsearch'
 require 'time'
 require 'rest-client'
-require 'pp'
 
 @redis = Redis.new(:host => ENV['LOGSTASH_URI'], :port => 6379)
 
@@ -112,8 +111,6 @@ five_weeks_ago = Time.new(five_ago.year, five_ago.month, five_ago.day, 0, 0)
 	}
 }
 
-pp @data
-
 @retention_aggs = {
 				"active_list": {
 					terms: {
@@ -189,8 +186,6 @@ pp @data
 	}
 }
 
-pp @retention
-
 html_string = '<html>
 <table width="600" style="border:1px solid #333">
   <tr>
@@ -204,7 +199,7 @@ html_string = '<html>
           <td>Avg time in app</td>
         </tr>'
 
-plain_string =  "\tActive users\tSessions\tAvg session length\tAvg time in app\n"
+plain_string =  "\tActive users\tSessions\tAvg session length\tAvg time in app per user\n"
 
 for day in ["Daily  ", "Weekly ", "Monthly"]
 	html_string += '<tr><td>' + day + '</td><td>' + 
@@ -260,8 +255,6 @@ html_string += '</tr></table></td>
   </tr>
 </table>
 </html>'
-
-puts html_string
 
 mailgun_endpoint = "https://api:" + ENV['MAILGUN_API_KEY'] + "@api.mailgun.net/v2/trywildcard.com/messages"
 
