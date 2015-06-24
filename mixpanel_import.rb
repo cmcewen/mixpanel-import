@@ -3,11 +3,12 @@ require 'redis'
 require 'elasticsearch'
 require 'time'
 require 'rest-client'
+require 'pp'
 
 @redis = Redis.new(:host => ENV['LOGSTASH_URI'], :port => 6379)
 
 @client = Mixpanel::Client.new(api_key: ENV['MIXPANEL_API'], api_secret: ENV['MIXPANEL_SECRET'])
-@data = @client.request('export', from_date: (Date.today-1).to_s, to_date: (Date.today-1).to_s)
+@data = @client.request('export', from_date: (Date.today-35).to_s, to_date: (Date.today-1).to_s)
 
 @data.each do |line| 
 	@redis.lpush "logstash", Hash["mixpanel_fields", 
@@ -21,16 +22,32 @@ sleep(1800)
 @eclient = Elasticsearch::Client.new host: ENV['ELASTICSEARCH_URI']
 
 now = Time.now
-yesterday = Time.new(now.year, now.month, now.day-1, 0, 0)
-end_of_yesterday = yesterday + 60*60*24
-last_week = Time.new(now.year, now.month, now.day-8, 0, 0)
-last_month = Time.new(now.year, now.month-1, now.day, 0, 0)
+end_of_yesterday = Time.new(now.year, now.month, now.day, 0, 0)
+yest = now - 60*60*24
+yesterday = Time.new(yest.year, yest.month, yest.day, 0, 0)
+week_ago = end_of_yesterday - 60*60*24*7
+month_ago = end_of_yesterday - 60*60*24*30
+two_ago = end_of_yesterday - 60*60*24*14
+three_ago = end_of_yesterday - 60*60*24*21
+four_ago = end_of_yesterday - 60*60*24*28
+five_ago = end_of_yesterday - 60*60*24*35
+last_week = Time.new(week_ago.year, week_ago.month, week_ago.day, 0, 0)
+last_month = Time.new(month_ago.year, month_ago.month, month_ago.day, 0, 0)
+two_weeks_ago = Time.new(two_ago.year, two_ago.month, two_ago.day, 0, 0)
+three_weeks_ago = Time.new(three_ago.year, three_ago.month, three_ago.day, 0, 0)
+four_weeks_ago = Time.new(four_ago.year, four_ago.month, four_ago.day, 0, 0)
+five_weeks_ago = Time.new(five_ago.year, five_ago.month, five_ago.day, 0, 0)
 
 @aggs = {
 				"active": {
 					cardinality: { 
-						field: 'mixpanel_fields.properties.DistinctID.raw' 
+						field: 'mixpanel_fields.properties.DistinctID.raw'
 					} 
+				},
+				"active_list": {
+					terms: {
+						field: 'mixpanel_fields.properties.DistinctID.raw'
+					}
 				},
 				"stats": {
 					stats: {
@@ -95,6 +112,85 @@ last_month = Time.new(now.year, now.month-1, now.day, 0, 0)
 	}
 }
 
+pp @data
+
+@retention_aggs = {
+				"active_list": {
+					terms: {
+						field: 'mixpanel_fields.properties.DistinctID.raw'
+					}
+				}
+			}
+
+@retention = @eclient.search index: '', search_type: 'count', body: { 
+	query: { 
+		bool: {
+			must: [ 
+				{
+					match: { 
+						event: 'FirstAppOpen' 
+					}
+				},
+				{
+					range: {
+						"@timestamp": {
+							gte: five_weeks_ago.iso8601,
+						}
+					}
+				}
+			]
+		}	
+	}, 
+	aggs: { 
+		"1 weeks ago": { 
+			filter: { 
+				range: {
+					"@timestamp": {
+						gte: two_weeks_ago.iso8601,
+						lte: last_week.iso8601
+					}
+				}
+			},
+	    aggs: @retention_aggs
+		},
+		"2 weeks ago": {
+			filter: { 
+				range: {
+					"@timestamp": {
+						gte: three_weeks_ago.iso8601,
+						lte: two_weeks_ago.iso8601
+					}
+				}
+			},
+			aggs: @retention_aggs
+		},
+		"3 weeks ago": {
+			filter: { 
+				range: {
+					"@timestamp": {
+						gte: four_weeks_ago.iso8601,
+						lte: three_weeks_ago.iso8601
+					}
+				}
+			},
+			aggs: @retention_aggs
+		},
+		"4 weeks ago": {
+			filter: { 
+				range: {
+					"@timestamp": {
+						gte: five_weeks_ago.iso8601,
+						lte: four_weeks_ago.iso8601
+					}
+				}
+			},
+			aggs: @retention_aggs
+		}
+	}
+}
+
+pp @retention
+
 html_string = '<html>
 <table width="600" style="border:1px solid #333">
   <tr>
@@ -126,14 +222,52 @@ end
 
 html_string += '</table></td>
   </tr>
+  <tr>
+    <td align="center">
+      <table align="center" width="600" border="0" cellspacing="0" cellpadding="0" style="border:1px solid #ccc;">
+        <tr>
+        	<td></td>
+          <td>1 week ago</td>
+          <td>2 weeks ago</td>
+          <td>3 weeks ago</td>
+          <td>4 weeks ago</td>
+        </tr>
+        <tr>
+        	<td>Installs</td>'
+
+
+WAUS = []
+
+@data["aggregations"]["Weekly "]["active_list"]["buckets"].each do |bucket|
+	WAUS.push(bucket["key"])
+end
+
+for num in [1, 2, 3, 4]
+	html_string += '<td>' +	@retention["aggregations"][num.to_s + " weeks ago"]["active_list"]["buckets"].length.to_s + '</td>'
+end
+
+html_string += '</tr><tr><td>Seen in the past week</td>'
+
+for num in [1, 2, 3, 4]
+	count = 0
+	@retention["aggregations"][num.to_s + " weeks ago"]["active_list"]["buckets"].each do |bucket|
+		count += (WAUS.include?(bucket["key"]) ? 1 : 0)
+	end
+	html_string += '<td>' + count.to_s + '</td>'
+end
+
+html_string += '</tr></table></td>
+  </tr>
 </table>
 </html>'
+
+puts html_string
 
 mailgun_endpoint = "https://api:" + ENV['MAILGUN_API_KEY'] + "@api.mailgun.net/v2/trywildcard.com/messages"
 
 message_params = {
-  from: "support@trywildcard.com",
-  to: "connor@trywildcard.com",
+  from: "connor@trywildcard.com",
+  to: "all@trywildcard.com",
   subject: "Daily Metrics for " + (Date.today - 1).strftime('%m-%d'),
   text: plain_string,
   html: html_string
