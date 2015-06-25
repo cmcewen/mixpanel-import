@@ -45,7 +45,8 @@ five_weeks_ago = Time.new(five_ago.year, five_ago.month, five_ago.day, 0, 0)
 				},
 				"active_list": {
 					terms: {
-						field: 'mixpanel_fields.properties.DistinctID.raw'
+						field: 'mixpanel_fields.properties.DistinctID.raw',
+						size: 10000
 					}
 				},
 				"stats": {
@@ -114,7 +115,8 @@ five_weeks_ago = Time.new(five_ago.year, five_ago.month, five_ago.day, 0, 0)
 @retention_aggs = {
 				"active_list": {
 					terms: {
-						field: 'mixpanel_fields.properties.DistinctID.raw'
+						field: 'mixpanel_fields.properties.DistinctID.raw',
+						size: 10000
 					}
 				}
 			}
